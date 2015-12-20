@@ -1,0 +1,82 @@
+(ql:quickload :ltk)
+(ql:quickload :cl-reddit)
+
+(defpackage :ltk-user
+  (:use :common-lisp :cl-user :ltk)
+  (:export #:login-gamen))
+(in-package :ltk-user)
+
+;; 子の窓をつくる
+(defun new-toplevel (master id user)
+  (let ((top (make-instance 'toplevel :master master :width 600 :height 600)))
+    (wm-title top (format nil "Ltk"))
+    (set-geometry top 700 400 600 200)
+    (bind top "<Alt-q>" (lambda (event) (destroy top))) ;; mainloopを終るのではない！
+    (let* ((come1 (cl-reddit:get-comments id user))
+	   (root (make-instance 'frame :master top :height 1000 :width 1000))
+	   (branches (make-instance 'scrolled-frame :master root
+				  :height 1000 :width 1000))
+	   (come-list (mapcar #'(lambda (n)
+				  (make-instance 'message
+						 :width 700
+						 :master (interior branches)
+						 :font "{Meiryo UI} 14 normal"
+						 :text (cl-reddit:comment-body n)))
+			      come1)))
+      (pack root :side :top :fill :both :expand t)
+      (pack branches :side :top :fill :both :expand t)
+      (pack come-list :side :top :fill :both :expand t))))
+
+(defun update-toplevel (master sub sub-name user)
+  (let* ((titles (mapcar #'(lambda (n) (concatenate 'string (cl-reddit:link-title n)
+						    "  コメント数:"
+						    (write-to-string (cl-reddit:link-num_comments n))))
+			 sub))
+	 (slis (make-instance 'scrolled-listbox :master master))
+	 (btn (make-instance 'button :master master :text sub-name))
+	 (id-list (mapcar #'(lambda (n) (cl-reddit:link-id n)) sub)))
+    (configure (listbox slis) :background 'yellow :height 30 :width 100 :font "{Meiryo UI} 14 normal")
+    (listbox-append slis titles)
+    (setf (command (listbox slis))
+          (lambda (x) (new-toplevel nil (nth (car (listbox-get-selection slis)) id-list) user)))
+    (setf (command btn) (lambda () (destroy slis) (destroy btn)))
+    (pack (list btn slis))))
+
+(defun select-sub (user)
+  (wm-title *tk* "サブレ選んでね")
+  (set-geometry *tk* 700 400 100 200)
+  (let* ((f (make-instance 'frame :padding 30))
+	 (f2 (make-instance 'frame))
+	 (btn-nm (make-instance 'button :master f2 :text "ノーモラル"))
+	 (btn-lisp (make-instance 'button :master f2 :text "lisp_ja")))
+    (setf (command btn-nm)
+	  (lambda ()
+	    (update-toplevel f (cl-reddit:get-subreddit "newsokunomoral") "×ノーモラル" user)))
+    (setf (command btn-lisp)
+	  (lambda ()
+	    (update-toplevel f (cl-reddit:get-subreddit "lisp_ja") "×lisp_ja" user)))
+    (pack (list f2 f) :fill :both :side :left)
+    (pack (list btn-nm btn-lisp))))
+
+
+
+(defun login-gamen ()
+  (with-ltk ()
+    (wm-title *tk* "ログインしてください")
+    (set-geometry *tk* 400 200 200 200)
+    (let* ((f (make-instance 'frame))
+	   (fr1 (make-instance 'labelframe :master f :text "ユーザー名"))
+	   (fr2 (make-instance 'labelframe :master f :text "パスワード"))
+	   (username (make-instance 'entry :master fr1))
+	   (pass (make-instance 'entry :master fr2))
+	   (btn (make-instance 'button :master f :text "ログイン ！")))
+      (focus username)
+      (configure username :font  "{Meiryo UI} 14 normal")
+      (configure pass :font  "{Meiryo UI} 14 normal")
+      (setf (command btn)
+	    (lambda () (destroy f)
+		    (select-sub (cl-reddit:api-login :username (text username) :password (text pass)))))
+      (pack f)
+      (pack (list fr1 fr2) :fill :both :side :top)
+      (pack (list username pass))
+      (pack btn :pady 10))))
